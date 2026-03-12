@@ -1,2 +1,0 @@
-# bodiary
-personal body snapshot
