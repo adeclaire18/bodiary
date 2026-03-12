@@ -352,26 +352,51 @@
     ctx.restore();
   }
 
-  function addDotStroke(evt) {
+  let isDrawing = false;
+  let currentStroke = null;
+
+  function startDrawing(evt) {
     if (state.step !== 2) return;
     evt.preventDefault();
+    isDrawing = true;
     if (!markCtxBundle) markCtxBundle = setupCanvas(markCanvas, MARK_LOGICAL);
     const p = canvasPointFromPointer(evt, markCanvas, MARK_LOGICAL);
-    const stroke = {
+    currentStroke = {
       r: state.brush.r,
       points: [[Math.round(p.x), Math.round(p.y)]],
     };
-    state.strokes.push(stroke);
+    state.strokes.push(currentStroke);
     redrawMark();
+  }
+
+  function continueDrawing(evt) {
+    if (!isDrawing || !currentStroke) return;
+    const p = canvasPointFromPointer(evt, markCanvas, MARK_LOGICAL);
+    currentStroke.points.push([Math.round(p.x), Math.round(p.y)]);
+    redrawMark();
+  }
+
+  function endDrawing(evt) {
+    if (!isDrawing) return;
+    isDrawing = false;
+    currentStroke = null;
   }
 
   function setupMarkInput() {
     const usePointer = "PointerEvent" in window;
     if (usePointer) {
-      markCanvas.addEventListener("pointerdown", addDotStroke);
+      markCanvas.addEventListener("pointerdown", startDrawing);
+      window.addEventListener("pointermove", continueDrawing);
+      window.addEventListener("pointerup", endDrawing);
+      window.addEventListener("pointercancel", endDrawing);
     } else {
-      markCanvas.addEventListener("mousedown", addDotStroke);
-      markCanvas.addEventListener("touchstart", addDotStroke, { passive: false });
+      markCanvas.addEventListener("mousedown", startDrawing);
+      window.addEventListener("mousemove", continueDrawing);
+      window.addEventListener("mouseup", endDrawing);
+      markCanvas.addEventListener("touchstart", startDrawing, { passive: false });
+      window.addEventListener("touchmove", continueDrawing, { passive: false });
+      window.addEventListener("touchend", endDrawing, { passive: false });
+      window.addEventListener("touchcancel", endDrawing, { passive: false });
     }
   }
 
@@ -809,4 +834,3 @@
 
   init();
 })();
-

@@ -71,13 +71,13 @@ export default function StepPager(props: Props) {
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
     >
-      <AnimatePresence initial={false} custom={dirRef.current} mode="wait">
+      <AnimatePresence initial={false} mode="wait">
         <motion.div
           key={props.step}
-          initial={{ x: 40, opacity: 0 }}
-          animate={{ x: dx * 0.15, opacity: 1 }}
-          exit={{ x: -40, opacity: 0 }}
-          transition={{ duration: 0.2, ease: 'easeOut' }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
         >
           {props.render(props.step)}
         </motion.div>
@@ -85,4 +85,3 @@ export default function StepPager(props: Props) {
     </div>
   )
 }
-

@@ -8,8 +8,8 @@ function App() {
   const tab = useUiStore((s) => s.tab)
 
   return (
-    <div className="relative h-full">
-      <div className="mx-auto h-full w-full max-w-md px-4 pb-24 pt-5">
+    <div className="relative h-full overflow-y-auto">
+      <div className="mx-auto h-full w-full max-w-md px-4 pb-32 pt-5">
         <div className="mb-4">
           <div className="flex items-center gap-3">
             <div className="grid size-10 place-items-center rounded-2xl bg-gradient-to-br from-[rgb(var(--bk-purple))] to-[rgb(var(--bk-pink))] text-white shadow-sm">

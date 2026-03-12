@@ -58,32 +58,51 @@ export default function BodyCanvasSelector(props: Props) {
     return { x: pos.x, y: pos.y }
   }
 
-  function startFromStage(stage: any) {
+  function startFromStage(stage: any, e?: any) {
+    console.log('startFromStage called', { drawing: drawingRef.current })
+    if (e) {
+      e.evt.preventDefault?.()
+      const target = e.target.getStage?.() || stage
+      target?.setPointerCapture?.(e.evt.pointerId)
+    }
     const p = getPointer(stage)
     if (!p) return
     drawingRef.current = true
     setDrawing(true)
     draftRef.current = [p]
     setDraft(draftRef.current)
+    console.log('Drawing started, points:', draftRef.current.length)
   }
 
   function moveFromStage(stage: any) {
-    if (!drawingRef.current) return
+    if (!drawingRef.current) {
+      console.log('moveFromStage: not drawing')
+      return
+    }
     const p = getPointer(stage)
     if (!p) return
+    console.log('moveFromStage: adding point', p)
     setDraft((prev) => {
       const last = prev[prev.length - 1]
       const dx = p.x - last.x
       const dy = p.y - last.y
-      if (dx * dx + dy * dy < 2.2) return prev
+      // 移除距离过滤，确保实时绘制反馈
+      // if (dx * dx + dy * dy < 2.2) return prev
       const next = [...prev, p]
       draftRef.current = next
+      console.log('Points count:', next.length)
       return next
     })
   }
 
-  function finalize() {
+
+
+  function finalize(e?: any) {
     if (!drawingRef.current) return
+    if (e?.evt) {
+      const stage = e.target.getStage?.() || stageRef.current
+      stage?.releasePointerCapture?.(e.evt.pointerId)
+    }
     drawingRef.current = false
     setDrawing(false)
     const current = draftRef.current
@@ -94,21 +113,75 @@ export default function BodyCanvasSelector(props: Props) {
       props.onChange([])
       return
     }
-    // Persist polygon as normalized points (0..1) to keep schema stable across screen sizes.
     const normalized: XY[] = current.map((p) => [p.x / size.w, p.y / size.h])
+    console.log('finalize calling onChange with', normalized.length, 'points')
     props.onChange(normalized)
   }
 
   function onMouseDown(e: any) {
-    startFromStage(e.target.getStage())
+    console.log('onMouseDown triggered')
+    const stage = e.target.getStage?.()
+    if (!stage) return
+    
+    // Konva特殊处理：在Stage上绑定全局鼠标移动事件
+    stage.container().style.cursor = 'crosshair'
+    
+    // 绑定全局鼠标移动和释放事件到document，确保事件捕获
+    document.addEventListener('mousemove', handleGlobalMouseMove)
+    document.addEventListener('mouseup', handleGlobalMouseUp)
+    
+    startFromStage(stage, e)
   }
+  
+  function handleGlobalMouseMove(e: MouseEvent) {
+    console.log('handleGlobalMouseMove triggered', { drawing: drawingRef.current })
+    if (!drawingRef.current) return
+    const stage = stageRef.current
+    if (!stage) return
+    
+    // 将DOM事件转换为Konva坐标
+    const rect = stage.container().getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    
+    console.log('Mouse position:', { x, y })
+    
+    // 手动创建点对象并添加到轨迹中
+    const p = { x, y }
+    setDraft((prev) => {
+      const next = [...prev, p]
+      draftRef.current = next
+      console.log('Points count:', next.length)
+      return next
+    })
+  }
+  
+  function handleGlobalMouseUp(e: MouseEvent) {
+    console.log('handleGlobalMouseUp triggered')
+    const stage = stageRef.current
+    if (!stage) return
+    
+    // 移除全局事件监听器
+    document.removeEventListener('mousemove', handleGlobalMouseMove)
+    document.removeEventListener('mouseup', handleGlobalMouseUp)
+    if (stage.container()) {
+      stage.container().style.cursor = 'default'
+    }
+    
+    finalize()
+  }
+  
   function onMouseMove(e: any) {
-    moveFromStage(e.target.getStage())
+    // 这个事件可能不会被触发，主要依赖全局事件处理
+    console.log('onMouseMove triggered (Stage level)')
   }
-  function onTouchStart() {
-    startFromStage(stageRef.current)
+  function onTouchStart(e: any) {
+    console.log('onTouchStart triggered')
+    startFromStage(stageRef.current, e)
   }
-  function onTouchMove() {
+  function onTouchMove(e: any) {
+    console.log('onTouchMove triggered')
+    if (e.evt) e.evt.preventDefault?.()
     moveFromStage(stageRef.current)
   }
 
@@ -140,15 +213,16 @@ export default function BodyCanvasSelector(props: Props) {
       <div
         ref={wrapRef}
         className="overflow-hidden rounded-3xl border border-black/10 bg-white shadow-sm"
+        draggable={false}
       >
-        <div className="relative">
+        <div className="relative" draggable={false}>
           <Stage
             ref={stageRef}
             width={size.w}
             height={size.h}
             onMouseDown={onMouseDown}
             onMouseMove={onMouseMove}
-            onMouseUp={finalize}
+            onMouseUp={() => {}} // 使用全局事件处理
             onTouchStart={onTouchStart}
             onTouchMove={onTouchMove}
             onTouchEnd={finalize}
@@ -244,7 +318,7 @@ export default function BodyCanvasSelector(props: Props) {
 
             <Layer listening={false}>
               {/* Committed selection */}
-              {committedFlat.length >= 6 ? (
+              {committedFlat.length >= 4 ? (
                 <Line
                   points={committedFlat}
                   closed
@@ -256,7 +330,7 @@ export default function BodyCanvasSelector(props: Props) {
               ) : null}
 
               {/* Draft path while drawing */}
-              {polygonFlat.length >= 6 ? (
+              {polygonFlat.length >= 4 ? (
                 <Line
                   points={polygonFlat}
                   closed={false}
@@ -290,4 +364,3 @@ export default function BodyCanvasSelector(props: Props) {
     </div>
   )
 }
-
