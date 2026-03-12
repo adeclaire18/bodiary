@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import html2canvas from 'html2canvas'
 import { motion } from 'framer-motion'
 import BodyCanvasSelector from '../components/BodyCanvasSelector'
@@ -25,6 +25,36 @@ export default function AddRecordPage() {
   const addRecord = useRecordsStore((s) => s.addRecord)
 
   const [step, setStep] = useState<StepKey>(1)
+  
+  // 调试步骤变化
+  const debugSetStep = (newStep: StepKey) => {
+    console.log('setStep called:', { from: step, to: newStep })
+    setStep(newStep)
+  }
+  
+  // 监听步骤变化
+  useEffect(() => {
+    console.log('Step changed to:', step)
+  }, [step])
+
+  // 添加步骤切换函数，供按钮调用
+  const goToNextStep = () => {
+    console.log('goToNextStep called', { currentStep: step })
+    if (step < 3) {
+      const canNext = canGoNext(step)
+      console.log('Checking canGoNext for current step:', { step, canNext })
+      if (canNext) {
+        const nextStep = (step + 1) as StepKey
+        console.log('Going to step', nextStep)
+        debugSetStep(nextStep)
+      } else {
+        console.log('Cannot go to next step, validation failed')
+      }
+    } else {
+      console.log('Already at step 3, cannot go further')
+    }
+  }
+
   const [draft, setDraft] = useState<Draft>(() => ({
     polygon: [],
     tag: null,
@@ -38,10 +68,33 @@ export default function AddRecordPage() {
   const captureRef = useRef<HTMLDivElement | null>(null)
 
   const canGoNext = (s: StepKey) => {
-    if (s === 1) return draft.polygon.length >= 3
-    if (s === 2) return !!draft.tag
-    return true
+    console.log('canGoNext called', { step: s, draft: draft })
+    try {
+      if (s === 1) {
+        const result = draft.polygon.length >= 3
+        console.log('Step 1 check:', { polygonLength: draft.polygon.length, required: 3, result })
+        return result
+      }
+      if (s === 2) {
+        const result = !!draft.tag
+        console.log('Step 2 check:', { tag: draft.tag, result })
+        return result
+      }
+      console.log('Step 3 or other, returning true')
+      return true
+    } catch (error) {
+      console.error('Error in canGoNext:', error)
+      return false
+    }
   }
+
+  // 调试：在组件渲染时检查按钮状态
+  console.log('Component render - Step 1 button state:', {
+    step: step,
+    polygonLength: draft.polygon.length,
+    canGoNext1: canGoNext(1),
+    buttonDisabled: !canGoNext(1)
+  })
 
   const summary = useMemo(() => {
     return {
@@ -111,7 +164,7 @@ export default function AddRecordPage() {
 
       <StepPager
         step={step}
-        onStepChange={setStep}
+        onStepChange={debugSetStep}
         canGoNext={canGoNext}
         render={(s) => {
           if (s === 1) {
@@ -143,11 +196,20 @@ export default function AddRecordPage() {
                   <button
                     type="button"
                     disabled={!canGoNext(1)}
-                    onClick={() => setStep(2)}
+                    onClick={() => {
+                      console.log('Next button clicked - event triggered!')
+                      goToNextStep()
+                    }}
+                    onMouseDown={() => console.log('Next button mouse down')}
+                    onMouseUp={() => console.log('Next button mouse up')}
                     className="rounded-3xl bg-black/90 px-4 py-4 text-sm font-extrabold text-white shadow-sm hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     Next
                   </button>
+                </div>
+                {/* 调试信息 */}
+                <div className="text-xs text-black/50">
+                  Button debug: canGoNext(1)={String(canGoNext(1))}, step={step}, polygonLength={draft.polygon.length}
                 </div>
               </div>
             )
@@ -191,7 +253,7 @@ export default function AddRecordPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
-                    onClick={() => setStep(1)}
+                    onClick={() => debugSetStep(1)}
                     className="rounded-3xl bg-white/70 px-4 py-4 text-sm font-extrabold text-black/70 shadow-sm hover:bg-white hover:text-black"
                   >
                     Back
@@ -199,7 +261,7 @@ export default function AddRecordPage() {
                   <button
                     type="button"
                     disabled={!canGoNext(2)}
-                    onClick={() => setStep(3)}
+                    onClick={() => debugSetStep(3)}
                     className="rounded-3xl bg-black/90 px-4 py-4 text-sm font-extrabold text-white shadow-sm hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     Next

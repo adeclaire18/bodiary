@@ -81,7 +81,7 @@ export default function BodyCanvasSelector(props: Props) {
     }
     const p = getPointer(stage)
     if (!p) return
-    console.log('moveFromStage: adding point', p)
+    // console.log('moveFromStage: adding point', p)
     setDraft((prev) => {
       const last = prev[prev.length - 1]
       const dx = p.x - last.x
@@ -90,7 +90,7 @@ export default function BodyCanvasSelector(props: Props) {
       // if (dx * dx + dy * dy < 2.2) return prev
       const next = [...prev, p]
       draftRef.current = next
-      console.log('Points count:', next.length)
+      // console.log('Points count:', next.length)
       return next
     })
   }
@@ -134,7 +134,7 @@ export default function BodyCanvasSelector(props: Props) {
   }
   
   function handleGlobalMouseMove(e: MouseEvent) {
-    console.log('handleGlobalMouseMove triggered', { drawing: drawingRef.current })
+    // console.log('handleGlobalMouseMove triggered', { drawing: drawingRef.current })
     if (!drawingRef.current) return
     const stage = stageRef.current
     if (!stage) return
@@ -144,20 +144,20 @@ export default function BodyCanvasSelector(props: Props) {
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
     
-    console.log('Mouse position:', { x, y })
+    // console.log('Mouse position:', { x, y })
     
     // 手动创建点对象并添加到轨迹中
     const p = { x, y }
     setDraft((prev) => {
       const next = [...prev, p]
       draftRef.current = next
-      console.log('Points count:', next.length)
+      // console.log('Points count:', next.length)
       return next
     })
   }
   
   function handleGlobalMouseUp(e: MouseEvent) {
-    console.log('handleGlobalMouseUp triggered')
+    // console.log('handleGlobalMouseUp triggered')
     const stage = stageRef.current
     if (!stage) return
     
@@ -171,10 +171,10 @@ export default function BodyCanvasSelector(props: Props) {
     finalize()
   }
   
-  function onMouseMove(e: any) {
-    // 这个事件可能不会被触发，主要依赖全局事件处理
-    console.log('onMouseMove triggered (Stage level)')
-  }
+  // function onMouseMove(e: any) {
+  //   // 这个事件可能不会被触发，主要依赖全局事件处理
+  //   console.log('onMouseMove triggered (Stage level)')
+  // }
   function onTouchStart(e: any) {
     console.log('onTouchStart triggered')
     startFromStage(stageRef.current, e)
@@ -221,7 +221,7 @@ export default function BodyCanvasSelector(props: Props) {
             width={size.w}
             height={size.h}
             onMouseDown={onMouseDown}
-            onMouseMove={onMouseMove}
+            // onMouseMove={onMouseMove}
             onMouseUp={() => {}} // 使用全局事件处理
             onTouchStart={onTouchStart}
             onTouchMove={onTouchMove}
@@ -343,24 +343,11 @@ export default function BodyCanvasSelector(props: Props) {
             </Layer>
           </Stage>
 
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-white/85 to-transparent px-3 py-3 text-xs text-black/60">
-            <div>{drawing ? 'Drawing… release to close' : 'Draw freehand · release to close'}</div>
-            <div className="rounded-full bg-black/5 px-2 py-0.5 text-[11px] font-semibold">
-              {props.value?.length ? 'Selected' : 'No selection'}
-            </div>
-          </div>
+
         </div>
       </div>
 
-      <div className="mt-3 flex justify-end">
-        <button
-          type="button"
-          onClick={clear}
-          className="rounded-2xl bg-white/70 px-4 py-2 text-sm font-semibold text-black/70 shadow-sm hover:bg-white hover:text-black"
-        >
-          Clear
-        </button>
-      </div>
+      {/* Clear按钮已移动到右下角 */}
     </div>
   )
 }
