@@ -322,8 +322,8 @@ export default function BodyCanvasSelector(props: Props) {
                 <Line
                   points={committedFlat}
                   closed
-                  fill="rgba(244,114,182,0.20)"
-                  stroke="rgba(244,114,182,0.85)"
+                  fill="#f472b633"
+                  stroke="#f472b6d9"
                   strokeWidth={3}
                   lineJoin="round"
                 />
@@ -334,7 +334,7 @@ export default function BodyCanvasSelector(props: Props) {
                 <Line
                   points={polygonFlat}
                   closed={false}
-                  stroke="rgba(167,139,250,0.95)"
+                  stroke="#a78bfaf2"
                   strokeWidth={3}
                   lineCap="round"
                   lineJoin="round"

@@ -1,9 +1,9 @@
 import type { Tag } from '../types'
 
 const opts: { id: Tag; label: string; cls: string }[] = [
-  { id: 'good', label: 'GOOD', cls: 'from-[rgba(var(--bk-green),0.95)] to-[rgba(var(--bk-green),0.85)]' },
-  { id: 'bad', label: 'BAD', cls: 'from-[rgba(var(--bk-pink),0.95)] to-[rgba(var(--bk-pink),0.85)]' },
-  { id: 'confused', label: 'CONFUSED', cls: 'from-[rgba(var(--bk-purple),0.95)] to-[rgba(var(--bk-purple),0.85)]' },
+  { id: 'good', label: 'GOOD', cls: 'from-[#6ee7b7] to-[#6ee7b7]' },
+  { id: 'bad', label: 'BAD', cls: 'from-[#f472b6] to-[#f472b6]' },
+  { id: 'confused', label: 'CONFUSED', cls: 'from-[#a78bfa] to-[#a78bfa]' },
 ]
 
 export default function TagPicker(props: { value: Tag | null; onChange: (t: Tag) => void }) {

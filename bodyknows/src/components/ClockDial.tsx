@@ -100,8 +100,8 @@ export default function ClockDial(props: Props) {
         </svg>
 
         <div
-          className="absolute left-1/2 top-1/2 h-[62px] w-1 -translate-x-1/2 -translate-y-[30px] origin-[50%_100%] rounded-full bg-[rgb(var(--bk-purple))] shadow-sm"
-          style={{ transform: `translate(-50%, -30px) rotate(${needleAngle}deg)` }}
+          className="absolute left-1/2 top-1/2 h-[62px] w-1 -translate-x-1/2 -translate-y-[23px] origin-[50%_100%] rounded-full bg-[#a78bfa] shadow-sm"
+          style={{ transform: `translate(-50%, -23px) rotate(${needleAngle}deg)` }}
         />
         <div className="absolute left-1/2 top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/80" />
 

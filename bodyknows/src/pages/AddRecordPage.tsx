@@ -117,6 +117,28 @@ export default function AddRecordPage() {
         backgroundColor: null,
         scale: window.devicePixelRatio ?? 1,
         useCORS: true,
+        allowTaint: true,
+        logging: false,
+        // 强制使用兼容的颜色格式
+        onclone: (clonedDoc) => {
+          // 将所有CSS变量替换为实际颜色值
+          const style = clonedDoc.createElement('style')
+          style.textContent = `
+            :root {
+              --bk-bg: #f8f5ff !important;
+              --bk-card: #ffffff !important;
+              --bk-ink: #191923 !important;
+              --bk-muted: #6e6e82 !important;
+              --bk-purple: #a78bfa !important;
+              --bk-pink: #f472b6 !important;
+              --bk-green: #6ee7b7 !important;
+            }
+            * {
+              color: #191923 !important;
+            }
+          `
+          clonedDoc.head.appendChild(style)
+        },
       })
       const snapshot = canvas.toDataURL('image/png')
 
@@ -304,12 +326,14 @@ export default function AddRecordPage() {
 
                   <div className="rounded-3xl bg-white/70 p-4">
                     <div className="text-xs font-extrabold text-black/60">Snapshot preview target</div>
-                    <div className="mt-3 rounded-3xl border border-black/10 bg-white p-3 shadow-sm">
-                      <div ref={captureRef}>
-                        <BodyCanvasSelector
-                          value={draft.polygon}
-                          onChange={(poly) => setDraft((d) => ({ ...d, polygon: poly }))}
-                        />
+                    <div className="mt-3 flex justify-center rounded-3xl border border-black/10 bg-white p-3 shadow-sm">
+                      <div className="w-full max-w-[320px]">
+                        <div ref={captureRef}>
+                          <BodyCanvasSelector
+                            value={draft.polygon}
+                            onChange={(poly) => setDraft((d) => ({ ...d, polygon: poly }))}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>

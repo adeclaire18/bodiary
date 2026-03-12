@@ -1,13 +1,13 @@
 @import "tailwindcss";
 
 :root {
-  --bk-bg: 248 245 255;
-  --bk-card: 255 255 255;
-  --bk-ink: 25 25 35;
-  --bk-muted: 110 110 130;
-  --bk-purple: 167 139 250;
-  --bk-pink: 244 114 182;
-  --bk-green: 110 231 183;
+  --bk-bg: #f8f5ff;
+  --bk-card: #ffffff;
+  --bk-ink: #191923;
+  --bk-muted: #6e6e82;
+  --bk-purple: #a78bfa;
+  --bk-pink: #f472b6;
+  --bk-green: #6ee7b7;
 }
 
 html,
@@ -18,11 +18,10 @@ body,
 
 body {
   margin: 0;
-  color: rgb(var(--bk-ink));
+  color: var(--bk-ink);
   background:
-    radial-gradient(900px 600px at 20% 10%, rgba(var(--bk-pink), 0.15), transparent 60%),
-    radial-gradient(900px 600px at 80% 20%, rgba(var(--bk-purple), 0.18), transparent 60%),
-    radial-gradient(900px 600px at 50% 90%, rgba(var(--bk-green), 0.14), transparent 60%),
-    rgb(var(--bk-bg));
+    radial-gradient(900px 600px at 20% 10%, rgba(244, 114, 182, 0.15), transparent 60%),
+    radial-gradient(900px 600px at 80% 20%, rgba(167, 139, 250, 0.18), transparent 60%),
+    radial-gradient(900px 600px at 50% 90%, rgba(110, 231, 183, 0.14), transparent 60%),
+    var(--bk-bg);
 }
-
