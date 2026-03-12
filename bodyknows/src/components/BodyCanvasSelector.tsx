@@ -82,6 +82,20 @@ export default function BodyCanvasSelector(props: Props) {
     })
   }
 
+  function handleMouseMove(e: any) {
+    const stage = e.target.getStage()
+    if (!stage) return
+
+    // Keep drawing strictly while mouse is pressed.
+    // If the primary button is no longer down, finalize immediately.
+    if (drawingRef.current && e?.evt?.buttons !== 1) {
+      finalize()
+      return
+    }
+
+    moveFromStage(stage)
+  }
+
   function finalize() {
     if (!drawingRef.current) return
     drawingRef.current = false
@@ -103,7 +117,7 @@ export default function BodyCanvasSelector(props: Props) {
     startFromStage(e.target.getStage())
   }
   function onMouseMove(e: any) {
-    moveFromStage(e.target.getStage())
+    handleMouseMove(e)
   }
   function onTouchStart() {
     startFromStage(stageRef.current)
@@ -290,4 +304,3 @@ export default function BodyCanvasSelector(props: Props) {
     </div>
   )
 }
-
