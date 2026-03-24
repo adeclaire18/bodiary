@@ -67,27 +67,35 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
 
   // 2. 左侧工具栏的图标构建（带数量限制逻辑）
   Widget _buildDraggableIcon(String type, int count) {
-    bool isAvailable = count > 0 && droppedMarkers.length < 5;
-      return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 15),
-      child: Draggable<String>(
-        data: type,
-        // 关键：设置拖拽锚点为物体的中心，这样鼠标尖就会指在图标正中间
-        dragAnchorStrategy: pointerDragAnchorStrategy,
-        // 拖动时的“影子”：稍微放大，增加手感
-        feedback: Material(
-          color: Colors.transparent,
-          child: _getIconByType(type, isDragging: true),
-        ),
-        // 拖动时留在原地的“坑”：变淡
-        childWhenDragging: Opacity(
-          opacity: 0.2,
-          child: _getIconByType(type),
-        ),
-        // 正常显示的图标
-        child: Opacity(
-          opacity: isAvailable ? 1.0 : 0.1, // 不可用时几乎透明
+    // 保持图标在 Column 中的物理占位不变
+    return SizedBox(
+      height: 80, 
+      width: 60,
+      child: Center(
+        child: Draggable<String>(
+          data: type,
+          // 1. 设置锚点策略为指针（影响落点逻辑）
+          dragAnchorStrategy: pointerDragAnchorStrategy, 
+          
+          // 2. 核心修正：Feedback 视觉补偿
+          feedback: Material(
+            color: Colors.transparent,
+            // 将反馈组件向左上角偏移其尺寸的一半 (24 / 2 = 12)
+            // 这样鼠标尖就会锁定在图标的几何中心
+            child: Transform.translate(
+              offset: const Offset(-12, -12), 
+              child: _getIconByType(type, isSmall: true),
+            ),
+          ),
+          
+          // 3. 原地留下的占位（保持透明度，不消失）
+          childWhenDragging: Opacity(
+            opacity: 0.1,
+            child: _getIconByType(type),
+          ),
+          
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               _getIconByType(type),
               const SizedBox(height: 4),
@@ -136,8 +144,7 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
         final RenderBox cardBox = _cardKey.currentContext!.findRenderObject() as RenderBox;
         final Offset cardGlobalPos = cardBox.localToGlobal(Offset.zero);
         
-        // 现在的偏移计算：直接用鼠标位置减去卡片原点
-        // 考虑到 Positioned 是基于左上角渲染的，我们减去图标半径 (12)，让图标“盖”在鼠标点上
+        // 因为图标大小是 24x24，减去 12 能够让图标的几何中心对准鼠标尖
         final Offset relativePosition = details.offset - cardGlobalPos - const Offset(12, 12);
 
         setState(() {
@@ -179,7 +186,23 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
                 return Positioned(
                   left: marker['position'].dx,
                   top: marker['position'].dy,
-                  child: _getIconByType(marker['type'], isSmall: true),
+                  child: GestureDetector(
+                    onTap: () {
+                      // --- 核心删除逻辑 ---
+                      setState(() {
+                        // 1. 找到该图标的类型，将左侧计数器还回去
+                        String type = marker['type'];
+                        markerCounts[type] = markerCounts[type]! + 1;
+                        
+                        // 2. 从已放置列表中移除这个实例
+                        droppedMarkers.remove(marker);
+                      });
+                    },
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click, // 增加点击手感
+                      child: _getIconByType(marker['type'], isSmall: true),
+                    ),
+                  ),
                 );
               }).toList(),
 
