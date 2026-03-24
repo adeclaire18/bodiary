@@ -41,54 +41,58 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
   // 2. 关键：为卡片定义一个 Key 用于坐标转换
   final GlobalKey _cardKey = GlobalKey();
 
-  // 存储已经放置在身体上的标记
+  // 3. 存储已经放置在身体上的标记
   List<Map<String, dynamic>> droppedMarkers = [];
   // 模拟每个图标的剩余可用数量（最高 3 个）
   Map<String, int> markerCounts = {'good': 3, 'bad': 3, 'other': 3};
 
-  // // 1. 顶部日期水印
-  // Widget _buildHeader() {
-  //   return const Padding(
-  //     padding: EdgeInsets.symmetric(horizontal: 40.0, vertical: 20.0),
-  //     child: Align(
-  //       alignment: Alignment.centerLeft,
-  //       child: Text(
-  //         "2026.03.24", // 这里的日期可以根据 DateTime.now() 动态生成
-  //         style: TextStyle(
-  //           color: Colors.black12, // 极淡的灰色，不干扰视线
-  //           fontSize: 16,
-  //           fontWeight: FontWeight.w300,
-  //           letterSpacing: 1.2,
-  //         ),
-  //       ),
-  //     ),
-  //   );
-  // }
+  // 4. 要存储的数据结构
+  final TextEditingController _textController = TextEditingController();
+  List<Map<String, dynamic>> savedSnapshots = [];
 
-  // 2. 左侧工具栏的图标构建（带数量限制逻辑）
+  // 5. 保存
+  void _saveSnapshot() {
+    final snapshot = {
+      'date': DateTime.now().toString(),
+      'text': _textController.text,
+      'markers': List<Map<String, dynamic>>.from(droppedMarkers),
+    };
+
+    setState(() {
+      savedSnapshots.add(snapshot);
+    });
+
+    // 可选：保存后清空输入
+    _textController.clear();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Saved")),
+    );
+  }
+
+  
+  // 5. 左侧工具栏的图标构建（带数量限制逻辑）
   Widget _buildDraggableIcon(String type, int count) {
-    // 保持图标在 Column 中的物理占位不变
+    const double size = 24.0;
+    final Offset centerOffset = Offset(size / 2, size / 2);
+
     return SizedBox(
       height: 80, 
       width: 60,
       child: Center(
         child: Draggable<String>(
           data: type,
-          // 1. 设置锚点策略为指针（影响落点逻辑）
           dragAnchorStrategy: pointerDragAnchorStrategy, 
           
-          // 2. 核心修正：Feedback 视觉补偿
           feedback: Material(
             color: Colors.transparent,
-            // 将反馈组件向左上角偏移其尺寸的一半 (24 / 2 = 12)
-            // 这样鼠标尖就会锁定在图标的几何中心
             child: Transform.translate(
-              offset: const Offset(-12, -12), 
-              child: _getIconByType(type, isSmall: true),
+              // ✅ 用动态中心点，不再写死 20
+              offset: -centerOffset,
+              child: _getIconByType(type),
             ),
           ),
           
-          // 3. 原地留下的占位（保持透明度，不消失）
           childWhenDragging: Opacity(
             opacity: 0.1,
             child: _getIconByType(type),
@@ -110,9 +114,10 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
     );
   }
 
-  Widget _getIconByType(String type, {bool isDragging = false, bool isSmall = false}) {
-    double size = isSmall ? 24 : 30;
-    // 移除 isDragging 的放大判断，保持 size 一致
+
+  Widget _getIconByType(String type) {
+    // --- 核心修正：全局统一尺寸 24 ---
+    double size = 24.0; 
 
     switch (type) {
       case 'good':
@@ -125,6 +130,58 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
         return const SizedBox();
     }
   }
+
+
+  Widget _buildInnerControls() {
+    bool hasMarkers = droppedMarkers.isNotEmpty;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 输入框
+          AnimatedOpacity(
+            duration: const Duration(milliseconds: 300),
+            opacity: hasMarkers ? 1.0 : 0.0,
+            child: IgnorePointer(
+              ignoring: !hasMarkers,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.03),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: TextField(
+                  controller: _textController, // 👈 新增
+                  textAlign: TextAlign.center,
+                  decoration: const InputDecoration(
+                    hintText: "How's your body feeling?",
+                    border: InputBorder.none,
+                    isCollapsed: true,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          // 按钮
+          Row(
+            children: [
+              Expanded(child: _toggleButton("SKELETON", showSkeleton, () => setState(() => showSkeleton = !showSkeleton))),
+              const SizedBox(width: 6),
+              Expanded(child: _toggleButton("MUSCLES", showMuscles, () => setState(() => showMuscles = !showMuscles))),
+              const SizedBox(width: 6),
+              Expanded(child: _toggleButton("ORGANS", showOrgans, () => setState(() => showOrgans = !showOrgans))),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
 
 
   Widget _buildMainCard() {
@@ -141,11 +198,17 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
       ),
       child: DragTarget<String>(
       onAcceptWithDetails: (details) {
+        if (droppedMarkers.length >= 5) return;
+        if (markerCounts[details.data]! <= 0) return;
+        
         final RenderBox cardBox = _cardKey.currentContext!.findRenderObject() as RenderBox;
         final Offset cardGlobalPos = cardBox.localToGlobal(Offset.zero);
         
-        // 因为图标大小是 24x24，减去 12 能够让图标的几何中心对准鼠标尖
-        final Offset relativePosition = details.offset - cardGlobalPos - const Offset(12, 12);
+        // 解决偏移问题
+        const double size = 24.0;
+        final Offset centerOffset = Offset(20, 20);
+        final Offset relativePosition =
+            details.offset - cardGlobalPos - centerOffset;
 
         setState(() {
           droppedMarkers.add({
@@ -155,6 +218,7 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
           markerCounts[details.data] = markerCounts[details.data]! - 1;
         });
       },
+
         builder: (context, candidateData, rejectedData) {
           return Stack(
             children: [
@@ -182,35 +246,24 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
               if (showOrgans) Center(child: SvgPicture.string(svgOrgans)),
 
               // 4. 实时标记图标
-              ...droppedMarkers.map((marker) {
-                return Positioned(
-                  left: marker['position'].dx,
-                  top: marker['position'].dy,
-                  child: GestureDetector(
-                    onTap: () {
-                      // --- 核心删除逻辑 ---
-                      setState(() {
-                        // 1. 找到该图标的类型，将左侧计数器还回去
-                        String type = marker['type'];
-                        markerCounts[type] = markerCounts[type]! + 1;
-                        
-                        // 2. 从已放置列表中移除这个实例
-                        droppedMarkers.remove(marker);
-                      });
-                    },
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.click, // 增加点击手感
-                      child: _getIconByType(marker['type'], isSmall: true),
-                    ),
-                  ),
-                );
-              }).toList(),
+              ...droppedMarkers.map((marker) => DroppedMarkerWidget(
+                key: ValueKey(marker.hashCode), // 必须加 Key 保证状态独立
+                marker: marker,
+                icon: _getIconByType(marker['type']),
+                onRemove: () {
+                  setState(() {
+                    markerCounts[marker['type']] = markerCounts[marker['type']]! + 1;
+                    droppedMarkers.remove(marker);
+                  });
+                },
+              )).toList(),
 
-              // 5. 右下角时间水印
+              // 5. 底部输入 + 控制按钮（放进卡片内部）
               Positioned(
-                bottom: 16,
-                right: 16,
-                child: Text("18:42", style: TextStyle(color: Colors.black.withOpacity(0.05), fontSize: 10)),
+                left: 0,
+                right: 0,
+                bottom: 50, // 给时间留空间
+                child: _buildInnerControls(),
               ),
             ],
           );
@@ -246,66 +299,117 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
                           .toList(),
                     ),
                   ),
+
+                  // ✅ Save 按钮（卡片外左下）
+                  Positioned(
+                    left: MediaQuery.of(context).size.width / 2 - 150, // 对齐卡片左边
+                    bottom: 20,
+                    child: GestureDetector(
+                      onTap: _saveSnapshot,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Text(
+                          "SAVE",
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  ),
+
                 ],
               ),
             ),
 
-            // 底部控制区
-            _buildBottomControls(),
+            // // 底部控制区
+            // _buildBottomControls(),
           ],
         ),
       ),
     );
   }
 
-  // 底部控制栏组件
-  Widget _buildBottomControls() {
-    // 判断是否已经放置了标记
-    bool hasMarkers = droppedMarkers.isNotEmpty;
+  // // 底部控制栏组件
+  // Widget _buildBottomControls() {
+  //   bool hasMarkers = droppedMarkers.isNotEmpty;
 
-    return Container(
-      // 底部留出安全距离
-      padding: const EdgeInsets.fromLTRB(30, 0, 30, 40), 
-      child: Column(
-        mainAxisSize: MainAxisSize.min, // 自动适配内容高度
-        children: [
-          // 1. 动态显现的输入框
-          AnimatedOpacity(
-            duration: const Duration(milliseconds: 500),
-            opacity: hasMarkers ? 1.0 : 0.0,
-            curve: Curves.easeInOut,
-            child: IgnorePointer(
-              ignoring: !hasMarkers, // 没有标记时不可交互
-              child: TextField(
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 15, color: Colors.black87, fontWeight: FontWeight.w400),
-                decoration: const InputDecoration(
-                  hintText: "How's your body feeling?",
-                  hintStyle: TextStyle(color: Colors.black12),
-                  border: InputBorder.none,
-                ),
-              ),
-            ),
-          ),
+  //   return Container(
+  //     alignment: Alignment.center,
+  //     padding: const EdgeInsets.fromLTRB(0, 0, 0, 40),
+  //     child: SizedBox(
+  //       width: 300, // ✅ 和卡片宽度一致
+  //       child: Column(
+  //         mainAxisSize: MainAxisSize.min,
+  //         children: [
+  //           // ✅ 输入框（更显眼）
+  //           AnimatedOpacity(
+  //             duration: const Duration(milliseconds: 500),
+  //             opacity: hasMarkers ? 1.0 : 0.0,
+  //             curve: Curves.easeInOut,
+  //             child: IgnorePointer(
+  //               ignoring: !hasMarkers,
+  //               child: Container(
+  //                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+  //                 decoration: BoxDecoration(
+  //                   color: Colors.black.withOpacity(0.03), // ✅ 微弱背景
+  //                   borderRadius: BorderRadius.circular(6),
+  //                 ),
+  //                 child: TextField(
+  //                   textAlign: TextAlign.center,
+  //                   style: const TextStyle(
+  //                     fontSize: 14,
+  //                     color: Colors.black87,
+  //                   ),
+  //                   decoration: const InputDecoration(
+  //                     hintText: "How's your body feeling?",
+  //                     hintStyle: TextStyle(color: Colors.black38),
+  //                     border: InputBorder.none,
+  //                     isCollapsed: true, // ✅ 去掉默认高度
+  //                   ),
+  //                 ),
+  //               ),
+  //             ),
+  //           ),
 
-          const SizedBox(height: 15), // 输入框与按钮之间的呼吸感间距
+  //           const SizedBox(height: 12), // ✅ 更紧凑
 
-          // 2. 三个功能切换按钮 (SKELETON, MUSCLES, ORGANS)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _toggleButton("SKELETON", showSkeleton, 
-                  () => setState(() => showSkeleton = !showSkeleton)),
-              _toggleButton("MUSCLES", showMuscles, 
-                  () => setState(() => showMuscles = !showMuscles)),
-              _toggleButton("ORGANS", showOrgans, 
-                  () => setState(() => showOrgans = !showOrgans)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+  //           // ✅ 三个按钮（拉满 + 更紧凑）
+  //           Row(
+  //             children: [
+  //               Expanded(
+  //                 child: _toggleButton(
+  //                   "SKELETON",
+  //                   showSkeleton,
+  //                   () => setState(() => showSkeleton = !showSkeleton),
+  //                 ),
+  //               ),
+  //               const SizedBox(width: 6), // ✅ 缩小间距
+  //               Expanded(
+  //                 child: _toggleButton(
+  //                   "MUSCLES",
+  //                   showMuscles,
+  //                   () => setState(() => showMuscles = !showMuscles),
+  //                 ),
+  //               ),
+  //               const SizedBox(width: 6),
+  //               Expanded(
+  //                 child: _toggleButton(
+  //                   "ORGANS",
+  //                   showOrgans,
+  //                   () => setState(() => showOrgans = !showOrgans),
+  //                 ),
+  //               ),
+  //             ],
+  //           ),
+  //         ],
+  //       ),
+  //     ),
+  //   );
+  // }
+
 
   
 
@@ -335,6 +439,51 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
     return Opacity(
       opacity: 0.2,
       child: Container(color: color), // 暂时用颜色占位，后续替换为真实 SVG
+    );
+  }
+}
+
+class DroppedMarkerWidget extends StatefulWidget {
+  final Map<String, dynamic> marker;
+  final VoidCallback onRemove;
+  final Widget icon;
+
+  const DroppedMarkerWidget({
+    super.key, 
+    required this.marker, 
+    required this.onRemove, 
+    required this.icon
+  });
+
+  @override
+  State<DroppedMarkerWidget> createState() => _DroppedMarkerWidgetState();
+}
+
+class _DroppedMarkerWidgetState extends State<DroppedMarkerWidget> {
+  bool isVisible = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: widget.marker['position'].dx,
+      top: widget.marker['position'].dy,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 200),
+        opacity: isVisible ? 1.0 : 0.0,
+        curve: Curves.easeOut,
+        onEnd: () { if (!isVisible) widget.onRemove(); }, // 动画结束再彻底从列表移除
+        child: GestureDetector(
+          onTap: () => setState(() => isVisible = false),
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: Container(
+              padding: const EdgeInsets.all(8), // 增加命中区
+              color: Colors.transparent,
+              child: widget.icon,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
