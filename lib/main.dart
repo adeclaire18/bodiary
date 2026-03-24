@@ -1,122 +1,88 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
-void main() {
-  runApp(const MyApp());
-}
+void main() => runApp(const BodyRecordApp());
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class BodyRecordApp extends StatelessWidget {
+  const BodyRecordApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.green),
+      home: const BodyCanvasScreen(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class BodyCanvasScreen extends StatefulWidget {
+  const BodyCanvasScreen({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<BodyCanvasScreen> createState() => _BodyCanvasScreenState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _BodyCanvasScreenState extends State<BodyCanvasScreen> {
+  // 控制图层显示的变量
+  bool showSkeleton = false;
+  bool showOrgans = false;
+  bool showMuscles = false;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
+  // --- 占位 SVG 字符串 (实际开发时可替换为外部文件) ---
+  final String svgSkin = '''<svg viewBox="0 0 200 400"><path d="M100 20 C70 20 60 50 60 80 C60 120 40 150 40 220 L40 380 L80 380 L90 260 L110 260 L120 380 L160 380 L160 220 C160 150 140 120 140 80 C140 50 130 20 100 20Z" fill="none" stroke="#333" stroke-width="2"/></svg>''';
+  final String svgSkeleton = '''<svg viewBox="0 0 200 400"><g fill="none" stroke="blue" stroke-width="2"><path d="M80 100 Q100 90 120 100 M80 120 Q100 110 120 120 M80 140 Q100 130 120 140"/><path d="M100 80 L100 250"/></g></svg>''';
+  final String svgOrgans = '''<svg viewBox="0 0 200 400"><circle cx="100" cy="110" r="15" fill="red" opacity="0.6"/></svg>''';
+  final String svgMuscles = '''<svg viewBox="0 0 200 400"><path d="M65 150 Q80 180 65 250 M135 150 Q120 180 135 250" fill="none" stroke="orange" stroke-width="4"/></svg>''';
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+      appBar: AppBar(title: const Text("Body Record")),
+      body: Column(
+        children: [
+          // 1. 人体显示区域
+          Expanded(
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: 0.5, // 保持 1:2 的人体比例
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // 皮肤层 (始终显示)
+                    SvgPicture.string(svgSkin),
+                    // 骨骼层
+                    if (showSkeleton) SvgPicture.string(svgSkeleton),
+                    // 肌肉层
+                    if (showMuscles) SvgPicture.string(svgMuscles),
+                    // 脏器层
+                    if (showOrgans) SvgPicture.string(svgOrgans),
+                  ],
+                ),
+              ),
             ),
-          ],
-        ),
+          ),
+          // 2. 控制按钮区域
+          Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildToggleButton("骨骼", showSkeleton, () => setState(() => showSkeleton = !showSkeleton)),
+                _buildToggleButton("肌肉", showMuscles, () => setState(() => showMuscles = !showMuscles)),
+                _buildToggleButton("脏器", showOrgans, () => setState(() => showOrgans = !showOrgans)),
+              ],
+            ),
+          ),
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ),
+    );
+  }
+
+  Widget _buildToggleButton(String label, bool isActive, VoidCallback onTap) {
+    return FilterChip(
+      label: Text(label),
+      selected: isActive,
+      onSelected: (_) => onTap(),
     );
   }
 }
