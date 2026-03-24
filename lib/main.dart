@@ -27,6 +27,10 @@ class _BodyCanvasScreenState extends State<BodyCanvasScreen> {
   bool showSkeleton = false;
   bool showOrgans = false;
   bool showMuscles = false;
+  // 修正偏移问题
+  final GlobalKey _canvasKey = GlobalKey();
+  // 存储封闭路径的列表
+  List<Path> paths = [];
 
   // --- 占位 SVG 字符串 (实际开发时可替换为外部文件) ---
   final String svgSkin = '''<svg viewBox="0 0 200 400"><path d="M100 20 C70 20 60 50 60 80 C60 120 40 150 40 220 L40 380 L80 380 L90 260 L110 260 L120 380 L160 380 L160 220 C160 150 140 120 140 80 C140 50 130 20 100 20Z" fill="none" stroke="#333" stroke-width="2"/></svg>''';
@@ -44,18 +48,52 @@ class _BodyCanvasScreenState extends State<BodyCanvasScreen> {
           Expanded(
             child: Center(
               child: AspectRatio(
-                aspectRatio: 0.5, // 保持 1:2 的人体比例
+                aspectRatio: 0.5,
                 child: Stack(
+                  key: _canvasKey, // 给容器贴上标签，用于精确定位
                   alignment: Alignment.center,
                   children: [
-                    // 皮肤层 (始终显示)
                     SvgPicture.string(svgSkin),
-                    // 骨骼层
                     if (showSkeleton) SvgPicture.string(svgSkeleton),
-                    // 肌肉层
                     if (showMuscles) SvgPicture.string(svgMuscles),
-                    // 脏器层
                     if (showOrgans) SvgPicture.string(svgOrgans),
+                    
+                    GestureDetector(
+                      onPanUpdate: (details) {
+                        final RenderBox box = _canvasKey.currentContext!.findRenderObject() as RenderBox;
+                        final Offset localOffset = box.globalToLocal(details.globalPosition);
+                        
+                        setState(() {
+                          points.add(localOffset);
+                        });
+                      },
+                      onPanEnd: (details) {
+                        setState(() {
+                          // 之前的代码：points.add(null);
+                          // 现在加入路径闭合功能
+                          
+                          // --- 新增 logic ---
+                          // 找出刚才画的那一笔的所有点（即 points 列表中从最后向前数，直到 null 或起点）
+                          List<Offset> currentSegment = [];
+                          for (var i = points.length - 1; i >= 0; i--) {
+                            if (points[i] == null) break;
+                            currentSegment.insert(0, points[i]!);
+                          }
+
+                          // 如果有点，就形成封闭 Path
+                          if (currentSegment.isNotEmpty) {
+                            Path polygonPath = Path();
+                            polygonPath.addPolygon(currentSegment, true); // true 表示自动将终点连回起点闭合
+                            paths.add(polygonPath); // 我们需要一个新的 List 来存封闭后的多边形
+                            points.clear(); // 清空临时绘图点
+                          }
+                        });
+                      },
+                      child: CustomPaint(
+                        painter: PathPainter(points: points, paths: paths),
+                        size: Size.infinite,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -85,4 +123,49 @@ class _BodyCanvasScreenState extends State<BodyCanvasScreen> {
       onSelected: (_) => onTap(),
     );
   }
+
+  // 实现 Canvas 画笔追踪：一个用于存储路径点的列表
+  List<Offset?> points = []; 
+
+}
+
+
+// 实现 Canvas 画笔追踪：添加自定义绘画类
+class PathPainter extends CustomPainter {
+  final List<Offset?> points; // 正在画的点（线条）
+  final List<Path> paths;    // 已经画完的封闭多边形
+
+  PathPainter({required this.points, required this.paths});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // A. 绘制正在画的线条（给用户实时反馈）
+    if (points.isNotEmpty) {
+      Paint linePaint = Paint()
+        ..color = Colors.red
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = 3.0
+        ..style = PaintingStyle.stroke;
+
+      for (int i = 0; i < points.length - 1; i++) {
+        if (points[i] != null && points[i + 1] != null) {
+          canvas.drawLine(points[i]!, points[i + 1]!, linePaint);
+        }
+      }
+    }
+
+    // B. 绘制已经保存的封闭多边形
+    if (paths.isNotEmpty) {
+      Paint fillPaint = Paint()
+        ..color = Colors.red.withOpacity(0.8) // 80% 透明度
+        ..style = PaintingStyle.fill; // 关键：设置为填充模式
+
+      for (Path path in paths) {
+        canvas.drawPath(path, fillPaint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(PathPainter oldDelegate) => true;
 }
