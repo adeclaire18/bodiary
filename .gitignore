@@ -1,20 +1,45 @@
-# 构建产物
-dist/
-build/
-
-# 依赖包
-node_modules/
-
-# 开发环境文件
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# 日志文件
+# Miscellaneous
+*.class
 *.log
-npm-debug.log*
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
 
-# 编辑器文件
-.vscode/
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
 .idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release

@@ -1,20 +1,17 @@
 # bodiary
 
-This repo contains two client-only prototypes.
+A new Flutter project.
 
-## BodyKnows (React) — requested build
+## Getting Started
 
-- **Path**: `bodyknows/`
-- **Stack**: React + Vite + TypeScript + TailwindCSS + Zustand + Framer Motion + React Konva + html2canvas + PapaParse
-- **Run**:
+This project is a starting point for a Flutter application.
 
-```bash
-cd bodyknows
-npm install
-npm run dev
-```
+A few resources to get you started if this is your first Flutter project:
 
-## bodiary (Vue) — earlier prototype
+- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
+- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
+- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
 
-- **Path**: `web/`
-- **Stack**: Vue3 + Vite + TypeScript + TailwindCSS + SVG.js + html2canvas + FileSaver
+For help getting started with Flutter development, view the
+[online documentation](https://docs.flutter.dev/), which offers tutorials,
+samples, guidance on mobile development, and a full API reference.
