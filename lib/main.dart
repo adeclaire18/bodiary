@@ -140,34 +140,8 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 输入框
-          AnimatedOpacity(
-            duration: const Duration(milliseconds: 300),
-            opacity: hasMarkers ? 1.0 : 0.0,
-            child: IgnorePointer(
-              ignoring: !hasMarkers,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.03),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: TextField(
-                  controller: _textController, // 👈 新增
-                  textAlign: TextAlign.center,
-                  decoration: const InputDecoration(
-                    hintText: "How's your body feeling?",
-                    border: InputBorder.none,
-                    isCollapsed: true,
-                  ),
-                ),
-              ),
-            ),
-          ),
 
-          const SizedBox(height: 10),
-
-          // 按钮
+          // ✅ 1. 上面：按钮（不动）
           Row(
             children: [
               Expanded(child: _toggleButton("SKELETON", showSkeleton, () => setState(() => showSkeleton = !showSkeleton))),
@@ -177,12 +151,67 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
               Expanded(child: _toggleButton("ORGANS", showOrgans, () => setState(() => showOrgans = !showOrgans))),
             ],
           ),
+
+          const SizedBox(height: 10),
+
+          // ✅ 2. 下面：输入框 + SAVE 横排
+          Row(
+            children: [
+              // 👉 输入框占满剩余空间
+              Expanded(
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 300),
+                  opacity: hasMarkers ? 1.0 : 0.0,
+                  child: IgnorePointer(
+                    ignoring: !hasMarkers,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.03),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: TextField(
+                        controller: _textController,
+                        textAlign: TextAlign.left, // 👉 改成左对齐更自然
+                        decoration: const InputDecoration(
+                          hintText: "Add a Note...",
+                          border: InputBorder.none,
+                          isCollapsed: true,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 10),
+
+              // 👉 SAVE 固定大小
+              GestureDetector(
+                onTap: _saveSnapshot,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    "SAVE",
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 
-
+  // 自动获取日期并格式化
+  String _formatDate(DateTime date) {
+    return "${date.year}.${date.month.toString().padLeft(2, '0')}.${date.day.toString().padLeft(2, '0')}";
+  }
 
   Widget _buildMainCard() {
     return Container(
@@ -223,12 +252,12 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
           return Stack(
             children: [
               // 1. 卡片内左上角日期 (不再随页面移动)
-              const Positioned(
+              Positioned(
                 top: 16,
                 left: 16,
                 child: Text(
-                  "2026.03.24",
-                  style: TextStyle(color: Colors.black12, fontSize: 12, fontWeight: FontWeight.w300),
+                  _formatDate(DateTime.now()),
+                  style: const TextStyle(color: Colors.black12, fontSize: 12, fontWeight: FontWeight.w300),
                 ),
               ),
 
@@ -262,7 +291,7 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
               Positioned(
                 left: 0,
                 right: 0,
-                bottom: 50, // 给时间留空间
+                bottom: 5, // 给时间留空间
                 child: _buildInnerControls(),
               ),
             ],
@@ -279,8 +308,6 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
       body: SafeArea(
         child: Column(
           children: [
-            // // 顶部日期
-            // _buildHeader(),
 
             // 核心画布区
             Expanded(
@@ -299,118 +326,14 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
                           .toList(),
                     ),
                   ),
-
-                  // ✅ Save 按钮（卡片外左下）
-                  Positioned(
-                    left: MediaQuery.of(context).size.width / 2 - 150, // 对齐卡片左边
-                    bottom: 20,
-                    child: GestureDetector(
-                      onTap: _saveSnapshot,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Text(
-                          "SAVE",
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ),
-                  ),
-
                 ],
               ),
             ),
-
-            // // 底部控制区
-            // _buildBottomControls(),
           ],
         ),
       ),
     );
   }
-
-  // // 底部控制栏组件
-  // Widget _buildBottomControls() {
-  //   bool hasMarkers = droppedMarkers.isNotEmpty;
-
-  //   return Container(
-  //     alignment: Alignment.center,
-  //     padding: const EdgeInsets.fromLTRB(0, 0, 0, 40),
-  //     child: SizedBox(
-  //       width: 300, // ✅ 和卡片宽度一致
-  //       child: Column(
-  //         mainAxisSize: MainAxisSize.min,
-  //         children: [
-  //           // ✅ 输入框（更显眼）
-  //           AnimatedOpacity(
-  //             duration: const Duration(milliseconds: 500),
-  //             opacity: hasMarkers ? 1.0 : 0.0,
-  //             curve: Curves.easeInOut,
-  //             child: IgnorePointer(
-  //               ignoring: !hasMarkers,
-  //               child: Container(
-  //                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-  //                 decoration: BoxDecoration(
-  //                   color: Colors.black.withOpacity(0.03), // ✅ 微弱背景
-  //                   borderRadius: BorderRadius.circular(6),
-  //                 ),
-  //                 child: TextField(
-  //                   textAlign: TextAlign.center,
-  //                   style: const TextStyle(
-  //                     fontSize: 14,
-  //                     color: Colors.black87,
-  //                   ),
-  //                   decoration: const InputDecoration(
-  //                     hintText: "How's your body feeling?",
-  //                     hintStyle: TextStyle(color: Colors.black38),
-  //                     border: InputBorder.none,
-  //                     isCollapsed: true, // ✅ 去掉默认高度
-  //                   ),
-  //                 ),
-  //               ),
-  //             ),
-  //           ),
-
-  //           const SizedBox(height: 12), // ✅ 更紧凑
-
-  //           // ✅ 三个按钮（拉满 + 更紧凑）
-  //           Row(
-  //             children: [
-  //               Expanded(
-  //                 child: _toggleButton(
-  //                   "SKELETON",
-  //                   showSkeleton,
-  //                   () => setState(() => showSkeleton = !showSkeleton),
-  //                 ),
-  //               ),
-  //               const SizedBox(width: 6), // ✅ 缩小间距
-  //               Expanded(
-  //                 child: _toggleButton(
-  //                   "MUSCLES",
-  //                   showMuscles,
-  //                   () => setState(() => showMuscles = !showMuscles),
-  //                 ),
-  //               ),
-  //               const SizedBox(width: 6),
-  //               Expanded(
-  //                 child: _toggleButton(
-  //                   "ORGANS",
-  //                   showOrgans,
-  //                   () => setState(() => showOrgans = !showOrgans),
-  //                 ),
-  //               ),
-  //             ],
-  //           ),
-  //         ],
-  //       ),
-  //     ),
-  //   );
-  // }
-
-
   
 
   Widget _toggleButton(String label, bool active, VoidCallback onTap) {
