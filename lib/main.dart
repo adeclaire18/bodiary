@@ -377,9 +377,16 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
         },
         onAcceptWithDetails: (details) {
           final RenderBox cardBox = _cardKey.currentContext!.findRenderObject() as RenderBox;
-          final Offset relativeCenter = details.offset - cardBox.localToGlobal(Offset.zero);
+          final Offset localPos = cardBox.globalToLocal(details.offset);
+
           setState(() {
-            droppedMarkers.add({'type': details.data, 'position': relativeCenter});
+            droppedMarkers.add({
+              'type': details.data,
+              // --- 关键：存储比例坐标 ---
+              // 假设卡片固定逻辑尺寸是 300x520
+              'relX': localPos.dx / 300, 
+              'relY': localPos.dy / 520,
+            });
             markerCounts[details.data] = markerCounts[details.data]! - 1;
           });
         },
@@ -422,10 +429,13 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
 
           // 3. 渲染标记
           ...snapshot['markers'].map<Widget>((marker) {
-            final Offset center = marker['position'];
+            // 根据比例还原像素位置 (300x520 是卡片逻辑大小)
+            final double posX = marker['relX'] * 300;
+            final double posY = marker['relY'] * 520;
+
             return Positioned(
-              left: center.dx - 12,
-              top: center.dy - 12,
+              left: posX - 12, // 12 是图标半径
+              top: posY - 12,
               child: _getIconByType(marker['type']),
             );
           }).toList(),
@@ -546,58 +556,59 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
   // 2. 修改 _buildPageView 里的点击逻辑
   Widget _buildPageView() {
     final int total = savedSnapshots.length + 1;
-
     return SizedBox(
-      width: 600, // 稍微加宽一点，给 0.85 的大卡片留足呼吸空间
-      height: 600,
-      child: PageView.builder(
-        key: ValueKey('pv_${savedSnapshots.length}_$currentIndex'),
-        controller: PageController(
-          viewportFraction: 0.6, // 这个值控制卡片间的紧凑度，0.6 比较合适
-          initialPage: currentIndex,
-        ),
-        onPageChanged: (index) {
-          setState(() => currentIndex = index);
-        },
-        itemCount: total,
-        itemBuilder: (context, index) {
-          // --- 核心参数修正 ---
-          // 中间是编辑态的 0.85 倍，两侧是 0.7 倍
-          double scale = (index == currentIndex) ? 0.85 : 0.7;
+        // 1. 稍微加大容器宽度，确保 0.85 倍的中心卡片左右有足够的“露脸”空间
+        width: 650, 
+        height: 600,
+        child: PageView.builder(
+          key: ValueKey('pv_${savedSnapshots.length}_$currentIndex'),
+          controller: PageController(
+            // 2. 关键：将比例从 0.6 下调至 0.48 ~ 0.52 之间
+            // 值越小，两侧卡片露出的部分就越多。
+            viewportFraction: 0.45, 
+            initialPage: currentIndex,
+          ),
+          onPageChanged: (index) {
+            setState(() => currentIndex = index);
+          },
+          itemCount: total,
+          itemBuilder: (context, index) {
+            // 保持你要求的缩放比例
+            double scale = (index == currentIndex) ? 0.85 : 0.7;
 
-          return Center(
-            child: GestureDetector(
-              onTap: () {
-                if (index == currentIndex) {
-                  // 点击中间卡片进入编辑
-                  if (index == savedSnapshots.length) {
-                    setState(() {
-                      droppedMarkers.clear();
-                      markerCounts = {'good': 3, 'bad': 3, 'other': 3};
-                      _textController.clear();
-                      isPreviewMode = false;
-                    });
+            return Center(
+              child: GestureDetector(
+                onTap: () {
+                  if (index == currentIndex) {
+                    if (index == savedSnapshots.length) {
+                      setState(() {
+                        droppedMarkers.clear();
+                        markerCounts = {'good': 3, 'bad': 3, 'other': 3};
+                        _textController.clear();
+                        isPreviewMode = false;
+                      });
+                    } else {
+                      _editExistingSnapshot(index);
+                    }
                   } else {
-                    _editExistingSnapshot(index);
+                    setState(() {
+                      currentIndex = index;
+                    });
                   }
-                } else {
-                  // 点击侧边卡片仅切换位置
-                  setState(() {
-                    currentIndex = index;
-                  });
-                }
-              },
-              child: Transform.scale(
-                scale: scale,
-                child: index == savedSnapshots.length
-                    ? _buildAddCard()
-                    : _buildSnapshotCard(savedSnapshots[index]),
+                },
+                // 3. 使用 AnimatedContainer 让切换时的缩放有一点点过渡感（可选，如果不想要可以删掉）
+                child: AnimatedScale(
+                  scale: scale,
+                  duration: const Duration(milliseconds: 200),
+                  child: index == savedSnapshots.length
+                      ? _buildAddCard()
+                      : _buildSnapshotCard(savedSnapshots[index]),
+                ),
               ),
-            ),
-          );
-        },
-      ),
-    );
+            );
+          },
+        ),
+      );
   }
 
   // 3. 修改主编辑卡片的显示，使其比预览态（0.85）更小（例如 0.6）
@@ -677,6 +688,10 @@ class _DroppedMarkerWidgetState extends State<DroppedMarkerWidget> {
    */
   @override
   Widget build(BuildContext context) {
+  
+    final double posX = widget.marker['relX'] * 300;  
+    final double posY = widget.marker['relY'] * 520;
+  
     // --- 核心修复：基于逻辑中心来定位具有 padding 的 Widget ---
     // 1. widget.marker['position'] 存储的是图标在卡片逻辑坐标系中的逻辑中心点 (dx, dy)。
     // 2. 这里的 DroppedMarkerWidget 的 padding 为 8，图标大小为 24x24，所以它的总大小是 40x40。
@@ -685,8 +700,8 @@ class _DroppedMarkerWidgetState extends State<DroppedMarkerWidget> {
     // 5. 所以 Widget 的逻辑左上角点坐标应为 (dx - 20, dy - 20)。
 
     return Positioned(
-      left: widget.marker['position'].dx - 20, // 逻辑左上角 X
-      top: widget.marker['position'].dy - 20,  // 逻辑左上角 Y
+      left: posX - 20, // 逻辑左上角 X, 20 是带 Padding 的 Widget 半径
+      top: posY - 20,  // 逻辑左上角 Y
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 200),
         opacity: isVisible ? 1.0 : 0.0,
