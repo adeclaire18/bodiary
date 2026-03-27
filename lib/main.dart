@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:http/http.dart' as http; // flutter pub add http
+import 'dart:convert'; // 用于 jsonEncode 和 jsonDecode
+import 'package:intl/intl.dart';    // flutter pub add intl
 
 void main() => runApp(const BodySnapshotApp());
 
@@ -97,37 +100,99 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
     });
   }
 
-  // 5. 加载数据到沙盒：用于“修改模式”，将历史记录深度拷贝出来
-  void _loadDataToSandbox(int index) {
-    final snapshot = savedSnapshots[index];
-    setState(() {
-      // 使用 List.from 进行深度拷贝，防止修改沙盒时直接影响到了原始列表
-      droppedMarkers = List<Map<String, dynamic>>.from(
-        (snapshot['markers'] as List).map((m) => Map<String, dynamic>.from(m))
-      );
-      _textController.text = snapshot['text'] ?? "";
-      showSkeleton = snapshot['showSkeleton'] ?? false;
-      showMuscles = snapshot['showMuscles'] ?? false;
-      showOrgans = snapshot['showOrgans'] ?? false;
-
-      // 根据已有的标记计算剩余可用数量
-      markerCounts = {'good': 3, 'bad': 3, 'other': 3};
-      for (var m in droppedMarkers) {
-        String type = m['type'];
-        if (markerCounts.containsKey(type)) {
-          markerCounts[type] = markerCounts[type]! - 1;
-        }
-      }
-    });
-  }
-
   // 7. 保存
   // 文本输入控制器，用于获取用户输入的备注
   final TextEditingController _textController = TextEditingController();
+
   // 要存储的数据列表
   List<Map<String, dynamic>> savedSnapshots = [];
+
+  late PageController _pageController;
+
+  // 不再需要硬编码 savedSnapshots = []，而是从后端拉取。
+  void initState() {
+    super.initState();
+    // 根据当前索引初始化
+    _pageController = PageController(
+      viewportFraction: 0.45,
+      initialPage: currentIndex,
+    );
+    _fetchHistory();
+  }
+  
+  @override
+  void dispose() {
+    _pageController.dispose(); // 别忘了释放内存
+    super.dispose();
+  }
+
+  // 1. 从数据库拉取历史数据
+  Future<void> _fetchHistory() async {
+    try {
+      final response = await http.get(Uri.parse('http://localhost:3000/api/snapshots'));
+      
+      if (response.statusCode == 200) {
+        final List decoded = jsonDecode(response.body);
+        
+        setState(() {
+          // 关键点：使用 map 重新构造 list，并强制转换数值类型
+          savedSnapshots = decoded.map<Map<String, dynamic>>((item) {
+            // 核心：把 MongoDB 的 _id (ObjectId) 转为 String，否则后期修改会报错
+            if (item['_id'] != null) {
+              item['_id'] = item['_id'].toString();
+            }
+            return Map<String, dynamic>.from(item);
+          }).toList();
+
+          print("State 已更新，现在的 savedSnapshots 内存地址: ${savedSnapshots.hashCode}");
+          
+          // 数据加载后，确保 currentIndex 不越界
+          if (savedSnapshots.isNotEmpty) {
+            currentIndex = 0; 
+          }
+        });
+        print("成功同步 UI，记录数: ${savedSnapshots.length}");
+      }
+    } catch (e) {
+      print("UI 解析失败: $e"); // 如果这里报错，说明解析逻辑有问题
+    }
+  }
+
+  // 2. 将本地数据同步到数据库
+  Future<void> _syncToDatabase(Map<String, dynamic> data) async {
+    final url = Uri.parse('http://localhost:3000/api/snapshots');
+    
+    try {
+      // 在发送前，确保数据里的 _id 处理正确
+      // MongoDB 使用 _id 作为主键，而我们逻辑里用的是 id
+      final body = jsonEncode(data);
+
+      final response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: body,
+      );
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        // 非常重要：保存成功后，后端会返回带有 MongoDB 生成的 _id 的对象
+        // 我们需要更新本地数据，否则下次点击这张卡片修改时，程序不知道它的数据库 ID
+        setState(() {
+          if (editingIndex == -1) {
+            savedSnapshots.last['_id'] = responseData['_id'];
+          } else {
+            savedSnapshots[editingIndex]['_id'] = responseData['_id'];
+          }
+        });
+        print("同步成功，ID 为: ${responseData['_id']}");
+      }
+    } catch (e) {
+      print("同步到数据库出错: $e");
+    }
+  }
+
   // 保存快照函数
-  void _saveSnapshot() {
+  void _saveSnapshot() async {
     /**
     * 保存快照
     * 
@@ -141,35 +206,71 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
     * 4. 100ms 后关闭白闪并切换到预览模式
     * 5. 清空输入框
     */
-   
-    // 构造当前沙盒内的数据
+
     final Map<String, dynamic> currentData = {
-      'date': editingIndex == -1 
-          ? _formatDate(DateTime.now()) 
-          : savedSnapshots[editingIndex]['date'],
+      if (editingIndex != -1 && savedSnapshots[editingIndex].containsKey('_id'))
+        'id': savedSnapshots[editingIndex]['_id'],
+      
       'text': _textController.text,
       'markers': List<Map<String, dynamic>>.from(droppedMarkers),
       'showSkeleton': showSkeleton,
       'showMuscles': showMuscles,
       'showOrgans': showOrgans,
+      // 注意：这里不再传本地生成的 date 字符串，让后端处理时间逻辑更准确
     };
 
-    setState(() {
-      if (editingIndex == -1) {
-        // --- 逻辑：新增 ---
-        savedSnapshots.add(currentData);
-        currentIndex = savedSnapshots.length - 1; // 自动跳转到最新的这张
-      } else {
-        // --- 逻辑：覆盖修改 ---
-        savedSnapshots[editingIndex] = currentData;
-        currentIndex = editingIndex; // 保持在当前位置
-      }
+    // 1. 同步到数据库
+    await _syncToDatabase(currentData);
 
-      isPreviewMode = true; // 返回预览模式
-      // 保存成功后，最好调用一次清空，确保下次进入是干净的
-      _clearSandbox(); 
+    // 2. 重新拉取数据以确保顺序和时间戳完全对齐（最稳妥的做法）
+    await _fetchHistory();
+
+    setState(() {
+      isPreviewMode = true;
+      _clearSandbox();
+      // 自动定位到最后一张（最新创建的）或保持当前（修改的）
+      if (editingIndex == -1) {
+        currentIndex = savedSnapshots.length - 1;
+      }
+    });
+    
+  }
+
+
+  void _recalculateMarkerCounts() {
+    setState(() {
+      // 1. 先重置为初始满额状态
+      markerCounts = {'good': 3, 'bad': 3, 'other': 3};
+
+      // 2. 遍历当前沙盒中的 markers，逐一扣除
+      for (var marker in droppedMarkers) {
+        String type = marker['type'] ?? 'other';
+        if (markerCounts.containsKey(type)) {
+          markerCounts[type] = (markerCounts[type]! - 1).clamp(0, 3);
+        }
+      }
     });
   }
+
+
+  // 5. 加载数据到沙盒：用于“修改模式”，将历史记录深度拷贝出来
+  void _loadDataToSandbox(int index) {
+    final snapshot = savedSnapshots[index];
+    setState(() {
+      // 深度拷贝数据
+      droppedMarkers = List<Map<String, dynamic>>.from(
+        (snapshot['markers'] as List).map((m) => Map<String, dynamic>.from(m))
+      );
+      _textController.text = snapshot['text'] ?? "";
+      showSkeleton = snapshot['showSkeleton'] ?? false;
+      showMuscles = snapshot['showMuscles'] ?? false;
+      showOrgans = snapshot['showOrgans'] ?? false;
+
+      // 重新计算标记剩余数量
+      _recalculateMarkerCounts();
+    });
+  }
+
 
 
   Widget _buildBodyBase({bool skeleton = false, bool muscles = false, bool organs = false}) {
@@ -262,21 +363,26 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
    * - bad: 红色叉号，表示问题状态
    * - other: 紫色云朵，表示其他状态
    */
-  Widget _getIconByType(String type) {
-    double size = 24.0; 
+  Widget _getIconByType(String type, {double size = 40}) {
+    IconData iconData;
+    Color color;
 
     switch (type) {
       case 'good':
-        return Icon(Icons.check_circle_outline, color: Colors.green.withOpacity(0.7), size: size);
+        iconData = Icons.check_circle;
+        color = Colors.green;
+        break;
       case 'bad':
-        return Icon(Icons.cancel_outlined, color: Colors.red.withOpacity(0.7), size: size);
-      case 'other':
-        return Icon(Icons.cloud_outlined, color: Colors.purple.withOpacity(0.7), size: size);
+        iconData = Icons.warning;
+        color = Colors.red;
+        break;
       default:
-        return const SizedBox();
+        iconData = Icons.help;
+        color = Colors.orange;
     }
-  }
 
+    return Icon(iconData, color: color, size: size);
+  }
 
 
   /**
@@ -450,39 +556,71 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
    * @param scale 缩放比例（用于卡片流中的大小差异化）
    */
   Widget _buildSnapshotCard(Map<String, dynamic> snapshot) {
+    // 1. 安全解析日期（优先使用 createdAt）
+    String dateStr = "未知日期";
+    if (snapshot['createdAt'] != null) {
+      DateTime dt = DateTime.parse(snapshot['createdAt']).toLocal();
+      dateStr = DateFormat('yyyy-MM-dd HH:mm').format(dt);
+    }
+
     return Container(
       width: 300,
       height: 520,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20)],
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
       ),
-      child: Stack(
-        children: [
-          // 1. 日期 (位置必须与编辑态一致)
-          Positioned(top: 16, left: 16, child: Text(snapshot['date'].toString().substring(0, 10), style: const TextStyle(fontSize: 12, color: Colors.black26))),
-          
-          // 2. 统一的身体层 (关键：这里的布局必须和编辑态一模一样)
-          _buildBodyBase(
-            skeleton: snapshot['showSkeleton'] ?? false,
-            muscles: snapshot['showMuscles'] ?? false,
-            organs: snapshot['showOrgans'] ?? false,
-          ),
+      child: ClipRRect( // 确保内容不超出圆角
+        child: Stack(
+          children: [
+            // 背景：人体基础图层
+            _buildBodyBase(
+              skeleton: snapshot['showSkeleton'] ?? false,
+              muscles: snapshot['showMuscles'] ?? false,
+              organs: snapshot['showOrgans'] ?? false,
+            ),
 
-          // 3. 渲染标记
-          ...snapshot['markers'].map<Widget>((marker) {
-            // 根据比例还原像素位置 (300x520 是卡片逻辑大小)
-            final double posX = marker['relX'] * 300;
-            final double posY = marker['relY'] * 520;
+            // 顶部信息栏
+            Positioned(
+              top: 16,
+              left: 16,
+              child: Text(dateStr, style: const TextStyle(fontSize: 10, color: Colors.black26)),
+            ),
 
-            return Positioned(
-              left: posX - 12, // 12 是图标半径
-              top: posY - 12,
-              child: _getIconByType(marker['type']),
-            );
-          }).toList(),
-        ],
+            // --- 恢复 Marker 渲染 ---
+            if (snapshot['markers'] != null && snapshot['markers'] is List)
+              ...(snapshot['markers'] as List).map<Widget>((marker) {
+                // 确保数据是 Map 格式
+                if (marker is! Map) return const SizedBox.shrink();
+
+                final double relX = (marker['relX'] as num?)?.toDouble() ?? 0.0;
+                final double relY = (marker['relY'] as num?)?.toDouble() ?? 0.0;
+                final String type = marker['type']?.toString() ?? 'other';
+
+                return Positioned(
+                  left: relX * 300 - 12,
+                  top: relY * 520 - 12,
+                  child: _getIconByType(type, size: 24),
+                );
+              }).toList(),
+              
+            
+            // 底部文本备注预览（如果有的话）
+            if (snapshot['text'] != null && snapshot['text'].isNotEmpty)
+              Positioned(
+                bottom: 12,
+                left: 12,
+                right: 12,
+                child: Text(
+                  snapshot['text'],
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 10, color: Colors.black45),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -598,65 +736,73 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
 
   // 2. 修改 _buildPageView 里的点击逻辑
   Widget _buildPageView() {
-    final int total = savedSnapshots.length + 1;
-    return SizedBox(
-        // 1. 稍微加大容器宽度，确保 0.85 倍的中心卡片左右有足够的“露脸”空间
-        width: 650, 
-        height: 600,
-        child: PageView.builder(
-          key: ValueKey('pv_${savedSnapshots.length}_$currentIndex'),
-          controller: PageController(
-            // 2. 关键：将比例从 0.6 下调至 0.48 ~ 0.52 之间
-            // 值越小，两侧卡片露出的部分就越多。
-            viewportFraction: 0.45, 
-            initialPage: currentIndex,
-          ),
-          onPageChanged: (index) {
-            setState(() => currentIndex = index);
-          },
-          itemCount: total,
-          itemBuilder: (context, index) {
-            // 保持你要求的缩放比例
-            double scale = (index == currentIndex) ? 0.85 : 0.7;
+    // 打印调试信息，看看到底渲染时 savedSnapshots 是多少
+    print("正在构建 PageView, 记录数: ${savedSnapshots.length}");
+    
+    // 强制实时计算，不要用缓存变量
+    final int totalCount = savedSnapshots.length + 1;
 
-            return Center(
-              child: GestureDetector(
-              onTap: () {
-                if (index == currentIndex) {
-                  if (index == savedSnapshots.length) {
-                    // --- 情况 1：新增模式 ---
-                    setState(() {
-                      editingIndex = -1; // 明确身份：新同学
-                      _clearSandbox();    // 必须清空沙盒，不能带任何历史标记
-                      isPreviewMode = false;
-                    });
-                  } else {
-                    // --- 情况 2：修改模式 ---
-                    setState(() {
-                      editingIndex = index; // 明确身份：老用户
-                    });
-                    _loadDataToSandbox(index); // 深度拷贝旧数据到沙盒
-                    setState(() {
-                      isPreviewMode = false;
-                    });
-                  }
-                } else {
-                  setState(() => currentIndex = index); // 仅仅是滚动，不进编辑
-                }
-              },
-                // 3. 使用 AnimatedContainer 让切换时的缩放有一点点过渡感（可选，如果不想要可以删掉）
-                child: AnimatedScale(
-                  scale: scale,
-                  duration: const Duration(milliseconds: 200),
-                  child: index == savedSnapshots.length
-                      ? _buildAddCard()
-                      : _buildSnapshotCard(savedSnapshots[index]),
-                ),
-              ),
-            );
-          },
+    return SizedBox(
+      width: 600,
+      height: 600,
+      child: PageView.builder(
+        // controller: _pageController,
+        // 关键：给 PageView 一个由长度决定的 Key，强制它在数据变化时重绘
+        key: ValueKey('pv_${savedSnapshots.length}'), 
+        controller: PageController(
+          viewportFraction: 0.45,
+          initialPage: currentIndex >= totalCount ? 0 : currentIndex,
         ),
-      );
+        itemCount: totalCount, // 必须使用最新长度
+        onPageChanged: (index) => setState(() => currentIndex = index),
+        itemBuilder: (context, index) {
+          // 1. 判断是否是当前正中心的卡片
+          final bool isCenter = (index == currentIndex);
+          
+          return GestureDetector(
+            // 关键：为了增大点击灵敏度，设置 behavior
+            behavior: HitTestBehavior.opaque, 
+            onTap: () {
+              if (isCenter) {
+                // --- 情况 A：点击的是中间那张，进入编辑 ---
+                if (index == savedSnapshots.length) {
+                  // 点击的是最后的加号
+                  _clearSandbox();
+                  setState(() {
+                    editingIndex = -1;
+                    isPreviewMode = false;
+                  });
+                } else {
+                  // 点击的是已有的历史卡片
+                  _loadDataToSandbox(index); // 内部已包含 _recalculateMarkerCounts
+                  setState(() {
+                    editingIndex = index;
+                    isPreviewMode = false;
+                  });
+                }
+              } else {
+                // --- 情况 B：点击的是旁边的卡片，自动滚动到中间 ---
+                _pageController.animateToPage(
+                  index,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOut,
+                );
+                // 注意：onPageChanged 会自动更新 currentIndex，所以这里不需要手动 setState
+              }
+            },
+            child: Center(
+              child: AnimatedScale(
+                scale: isCenter ? 1.0 : 0.8, // 稍微拉开一点缩放差距，视觉更清晰
+                duration: const Duration(milliseconds: 200),
+                child: index == savedSnapshots.length
+                    ? _buildAddCard()
+                    : _buildSnapshotCard(savedSnapshots[index]),
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   // 3. 修改主编辑卡片的显示，使其比预览态（0.85）更小（例如 0.6）
