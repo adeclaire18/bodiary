@@ -54,6 +54,10 @@ class MainCanvasPage extends StatefulWidget {
  * - 预览模式下的卡片流视图
  */
 class _MainCanvasPageState extends State<MainCanvasPage> {
+
+  // -1 表示新增，0+ 表示正在修改对应的历史索引
+  int editingIndex = -1; 
+
   // 控制图层显示（骨骼、肌肉、器官）
   bool showSkeleton = false;
   bool showMuscles = false;
@@ -79,52 +83,92 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
   // 每个图标的剩余可用数量（最高 3 个）
   Map<String, int> markerCounts = {'good': 3, 'bad': 3, 'other': 3};
 
-  // 4. 保存
+  // 4. 清空沙盒：用于“新增模式”，确保进入编辑时是一张白纸
+  void _clearSandbox() {
+    setState(() {
+      droppedMarkers.clear(); // 清空所有标记
+      _textController.clear(); // 清空文字备注
+      // 重置图层开关（可选，根据你的需求决定是否保留上次的选择）
+      showSkeleton = false;
+      showMuscles = false;
+      showOrgans = false;
+      // 重置标记计数器
+      markerCounts = {'good': 3, 'bad': 3, 'other': 3};
+    });
+  }
+
+  // 5. 加载数据到沙盒：用于“修改模式”，将历史记录深度拷贝出来
+  void _loadDataToSandbox(int index) {
+    final snapshot = savedSnapshots[index];
+    setState(() {
+      // 使用 List.from 进行深度拷贝，防止修改沙盒时直接影响到了原始列表
+      droppedMarkers = List<Map<String, dynamic>>.from(
+        (snapshot['markers'] as List).map((m) => Map<String, dynamic>.from(m))
+      );
+      _textController.text = snapshot['text'] ?? "";
+      showSkeleton = snapshot['showSkeleton'] ?? false;
+      showMuscles = snapshot['showMuscles'] ?? false;
+      showOrgans = snapshot['showOrgans'] ?? false;
+
+      // 根据已有的标记计算剩余可用数量
+      markerCounts = {'good': 3, 'bad': 3, 'other': 3};
+      for (var m in droppedMarkers) {
+        String type = m['type'];
+        if (markerCounts.containsKey(type)) {
+          markerCounts[type] = markerCounts[type]! - 1;
+        }
+      }
+    });
+  }
+
+  // 7. 保存
   // 文本输入控制器，用于获取用户输入的备注
   final TextEditingController _textController = TextEditingController();
   // 要存储的数据列表
   List<Map<String, dynamic>> savedSnapshots = [];
   // 保存快照函数
   void _saveSnapshot() {
-      /**
-      * 保存快照
-      * 
-      * 将当前画布上的所有数据（标记、备注）保存为一个快照，
-      * 并触发保存动画效果。
-      * 
-      * 流程：
-      * 1. 创建快照数据对象
-      * 2. 添加到保存列表
-      * 3. 触发 100ms 白闪动画
-      * 4. 100ms 后关闭白闪并切换到预览模式
-      * 5. 清空输入框
-      */
-
-    final snapshot = {
-      'date': DateTime.now().toString(),
+    /**
+    * 保存快照
+    * 
+    * 将当前画布上的所有数据（标记、备注）保存为一个快照，
+    * 并触发保存动画效果。
+    * 
+    * 流程：
+    * 1. 创建快照数据对象
+    * 2. 添加到保存列表
+    * 3. 触发 100ms 白闪动画
+    * 4. 100ms 后关闭白闪并切换到预览模式
+    * 5. 清空输入框
+    */
+   
+    // 构造当前沙盒内的数据
+    final Map<String, dynamic> currentData = {
+      'date': editingIndex == -1 
+          ? _formatDate(DateTime.now()) 
+          : savedSnapshots[editingIndex]['date'],
       'text': _textController.text,
       'markers': List<Map<String, dynamic>>.from(droppedMarkers),
-
-      // ✅（建议一起存）
       'showSkeleton': showSkeleton,
       'showMuscles': showMuscles,
       'showOrgans': showOrgans,
     };
 
     setState(() {
-      savedSnapshots.add(snapshot);
+      if (editingIndex == -1) {
+        // --- 逻辑：新增 ---
+        savedSnapshots.add(currentData);
+        currentIndex = savedSnapshots.length - 1; // 自动跳转到最新的这张
+      } else {
+        // --- 逻辑：覆盖修改 ---
+        savedSnapshots[editingIndex] = currentData;
+        currentIndex = editingIndex; // 保持在当前位置
+      }
 
-      // ✅ 始终定位到最新卡片
-      currentIndex = savedSnapshots.length - 1;
-
-      // ✅ 关键：直接进入 preview（不要再来回切）
-      isPreviewMode = true;
+      isPreviewMode = true; // 返回预览模式
+      // 保存成功后，最好调用一次清空，确保下次进入是干净的
+      _clearSandbox(); 
     });
-
-    // ✅ 清空编辑态（为下一次准备）
-    droppedMarkers.clear();
-    markerCounts = {'good': 3, 'bad': 3, 'other': 3};
-    _textController.clear();
   }
 
 
@@ -382,9 +426,8 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
           setState(() {
             droppedMarkers.add({
               'type': details.data,
-              // --- 关键：存储比例坐标 ---
-              // 假设卡片固定逻辑尺寸是 300x520
-              'relX': localPos.dx / 300, 
+              // 存储相对于卡片宽(300)高(520)的比例
+              'relX': localPos.dx / 300,
               'relY': localPos.dy / 520,
             });
             markerCounts[details.data] = markerCounts[details.data]! - 1;
@@ -578,24 +621,29 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
 
             return Center(
               child: GestureDetector(
-                onTap: () {
-                  if (index == currentIndex) {
-                    if (index == savedSnapshots.length) {
-                      setState(() {
-                        droppedMarkers.clear();
-                        markerCounts = {'good': 3, 'bad': 3, 'other': 3};
-                        _textController.clear();
-                        isPreviewMode = false;
-                      });
-                    } else {
-                      _editExistingSnapshot(index);
-                    }
-                  } else {
+              onTap: () {
+                if (index == currentIndex) {
+                  if (index == savedSnapshots.length) {
+                    // --- 情况 1：新增模式 ---
                     setState(() {
-                      currentIndex = index;
+                      editingIndex = -1; // 明确身份：新同学
+                      _clearSandbox();    // 必须清空沙盒，不能带任何历史标记
+                      isPreviewMode = false;
+                    });
+                  } else {
+                    // --- 情况 2：修改模式 ---
+                    setState(() {
+                      editingIndex = index; // 明确身份：老用户
+                    });
+                    _loadDataToSandbox(index); // 深度拷贝旧数据到沙盒
+                    setState(() {
+                      isPreviewMode = false;
                     });
                   }
-                },
+                } else {
+                  setState(() => currentIndex = index); // 仅仅是滚动，不进编辑
+                }
+              },
                 // 3. 使用 AnimatedContainer 让切换时的缩放有一点点过渡感（可选，如果不想要可以删掉）
                 child: AnimatedScale(
                   scale: scale,
