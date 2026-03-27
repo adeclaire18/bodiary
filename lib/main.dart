@@ -128,6 +128,23 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
   }
 
 
+  Widget _buildBodyBase({bool skeleton = false, bool muscles = false, bool organs = false}) {
+    return Center(
+      child: SizedBox(
+        width: 200,  // 固定 SVG 容器宽度
+        height: 400, // 固定 SVG 容器高度
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            SvgPicture.string(svgBody, fit: BoxFit.contain),
+            if (skeleton) SvgPicture.string(svgSkeleton, fit: BoxFit.contain),
+            if (muscles) SvgPicture.string(svgMuscles, fit: BoxFit.contain),
+            if (organs) SvgPicture.string(svgOrgans, fit: BoxFit.contain),
+          ],
+        ),
+      ),
+    );
+  }
   
   // 左侧工具栏的图标构建（带数量限制逻辑）
   /**
@@ -329,82 +346,42 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
       height: 520, 
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(4), // 极小圆角，更硬朗极简
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 15)
-        ],
+        borderRadius: BorderRadius.circular(4),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 15)],
       ),
       child: DragTarget<String>(
-      onAcceptWithDetails: (details) {
-        if (droppedMarkers.length >= 5) return;
-        if (markerCounts[details.data]! <= 0) return;
-        
-        final RenderBox cardBox = _cardKey.currentContext!.findRenderObject() as RenderBox;
-        final Offset cardGlobalPos = cardBox.localToGlobal(Offset.zero);
-        
-        // 解决偏移问题
-        const double size = 24.0;
-        final Offset centerOffset = Offset(20, 20);
-        final Offset relativePosition =
-            details.offset - cardGlobalPos - centerOffset;
-
-        setState(() {
-          droppedMarkers.add({
-            'type': details.data,
-            'position': relativePosition,
-          });
-          markerCounts[details.data] = markerCounts[details.data]! - 1;
-        });
-      },
-
         builder: (context, candidateData, rejectedData) {
           return Stack(
             children: [
-              // 1. 卡片内左上角日期 (不再随页面移动)
-              Positioned(
-                top: 16,
-                left: 16,
-                child: Text(
-                  _formatDate(DateTime.now()),
-                  style: const TextStyle(color: Colors.black12, fontSize: 12, fontWeight: FontWeight.w300),
-                ),
-              ),
+              // 1. 日期
+              Positioned(top: 16, left: 16, child: Text(_formatDate(DateTime.now()), style: const TextStyle(color: Colors.black12, fontSize: 12))),
+              
+              // 2. 统一的身体层
+              _buildBodyBase(skeleton: showSkeleton, muscles: showMuscles, organs: showOrgans),
 
-              // 2. 居中的人体底层
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 60), // 给上下留出日期和时间空间
-                  child: SvgPicture.string(svgBody),
-                ),
-              ),
-
-              // 3. 图层叠加
-              if (showSkeleton) Center(child: SvgPicture.string(svgSkeleton)),
-              if (showMuscles) Center(child: SvgPicture.string(svgMuscles)),
-              if (showOrgans) Center(child: SvgPicture.string(svgOrgans)),
-
-              // 4. 实时标记图标
+              // 3. 渲染标记 (坐标逻辑保持中心点对齐)
               ...droppedMarkers.map((marker) => DroppedMarkerWidget(
-                key: ValueKey(marker.hashCode), // 必须加 Key 保证状态独立
+                key: ValueKey(marker.hashCode),
                 marker: marker,
                 icon: _getIconByType(marker['type']),
-                onRemove: () {
-                  setState(() {
-                    markerCounts[marker['type']] = markerCounts[marker['type']]! + 1;
-                    droppedMarkers.remove(marker);
-                  });
-                },
+                onRemove: () => setState(() {
+                  markerCounts[marker['type']] = markerCounts[marker['type']]! + 1;
+                  droppedMarkers.remove(marker);
+                }),
               )).toList(),
 
-              // 5. 底部输入 + 控制按钮（放进卡片内部）
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 5, // 给时间留空间
-                child: _buildInnerControls(),
-              ),
+              // 4. 控制按钮
+              Positioned(left: 0, right: 0, bottom: 5, child: _buildInnerControls()),
             ],
           );
+        },
+        onAcceptWithDetails: (details) {
+          final RenderBox cardBox = _cardKey.currentContext!.findRenderObject() as RenderBox;
+          final Offset relativeCenter = details.offset - cardBox.localToGlobal(Offset.zero);
+          setState(() {
+            droppedMarkers.add({'type': details.data, 'position': relativeCenter});
+            markerCounts[details.data] = markerCounts[details.data]! - 1;
+          });
         },
       ),
     );
@@ -422,84 +399,37 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
    * @param snapshot 快照数据 Map
    * @param scale 缩放比例（用于卡片流中的大小差异化）
    */
-  Widget _buildSnapshotCard(Map<String, dynamic> snapshot, {double scale = 1.0}) {
-    return Transform.scale(
-      scale: scale,
-      child: Container(
-        width: 300,
-        height: 520,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(4),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20)
-          ],
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              top: 16,
-              left: 16,
-              child: Text(
-                snapshot['date'],
-                style: const TextStyle(fontSize: 12, color: Colors.black26),
-              ),
-            ),
-
-            Center(child: SvgPicture.string(svgBody)),
-
-            // 👉 渲染 markers
-            ...snapshot['markers'].map<Widget>((marker) {
-              return Positioned(
-                left: marker['position'].dx,
-                top: marker['position'].dy,
-                child: _getIconByType(marker['type']),
-              );
-            }).toList(),
-          ],
-        ),
+  Widget _buildSnapshotCard(Map<String, dynamic> snapshot) {
+    return Container(
+      width: 300,
+      height: 520,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(4),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20)],
       ),
-    );
-  }
+      child: Stack(
+        children: [
+          // 1. 日期 (位置必须与编辑态一致)
+          Positioned(top: 16, left: 16, child: Text(snapshot['date'].toString().substring(0, 10), style: const TextStyle(fontSize: 12, color: Colors.black26))),
+          
+          // 2. 统一的身体层 (关键：这里的布局必须和编辑态一模一样)
+          _buildBodyBase(
+            skeleton: snapshot['showSkeleton'] ?? false,
+            muscles: snapshot['showMuscles'] ?? false,
+            organs: snapshot['showOrgans'] ?? false,
+          ),
 
-
-  // page view
-  /**
-   * 构建页面视图（卡片流）
-   * 
-   * 在预览模式下显示所有保存的快照，
-   * 使用 PageView 实现横向滑动浏览。
-   * 最后一页是"+"卡片，用于添加新快照。
-   */
-  Widget _buildPageView() {
-    final int total = savedSnapshots.length + 1;
-
-    return SizedBox(
-      height: 550,
-      child: PageView.builder(
-        key: ValueKey(savedSnapshots.length), // ✅ 关键修复：强制刷新
-        controller: PageController(
-          viewportFraction: 0.9,
-          initialPage: currentIndex,
-        ),
-        onPageChanged: (index) {
-          setState(() => currentIndex = index);
-        },
-        itemCount: total,
-        itemBuilder: (context, index) {
-          // 👉 最后一页：+
-          if (index == savedSnapshots.length) {
-            return _buildAddCard();
-          }
-
-          final snapshot = savedSnapshots[index];
-
-          double scale = index == currentIndex ? 0.75 : 1.0;
-
-          return Center(
-            child: _buildSnapshotCard(snapshot, scale: scale),
-          );
-        },
+          // 3. 渲染标记
+          ...snapshot['markers'].map<Widget>((marker) {
+            final Offset center = marker['position'];
+            return Positioned(
+              left: center.dx - 12,
+              top: center.dy - 12,
+              child: _getIconByType(marker['type']),
+            );
+          }).toList(),
+        ],
       ),
     );
   }
@@ -514,68 +444,42 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
    * 点击后返回编辑模式，准备创建新快照。
    */
   Widget _buildAddCard() {
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          // ✅ 回到编辑态
-          isPreviewMode = false;
-
-          // ✅ 重置当前 index（关键）
-          currentIndex = savedSnapshots.length;
-        });
-      },
-      child: Container(
-        width: 300,
-        height: 520,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: Colors.black12),
-        ),
-        child: const Center(
-          child: Icon(Icons.add, size: 40, color: Colors.black26),
-        ),
-      ),
-    );
-  }
-
-
-
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-
-            // 核心画布区
-            Expanded(
-              child: Stack(
-                children: [
-                  // 居中的卡片
-                  Center(
-                    child: isPreviewMode ? _buildPageView() : _buildMainCard(),
-                  ),
-
-                  // 左侧工具栏
-                  Positioned(
-                    left: 20,
-                    top: 100,
-                    child: Column(
-                      children: markerCounts.entries
-                          .map((e) => _buildDraggableIcon(e.key, e.value))
-                          .toList(),
-                    ),
-                  ),
-                ],
-              ),
+      return GestureDetector(
+        onTap: () {
+          setState(() {
+            isPreviewMode = false; // 退出预览，进入编辑
+            // 清空旧数据，准备新记录
+            droppedMarkers.clear();
+            markerCounts = {'good': 3, 'bad': 3, 'other': 3};
+            _textController.clear();
+          });
+        },
+        child: Container(
+          width: 300,
+          height: 520,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: Colors.black.withOpacity(0.05), width: 2), // 加个虚线边框感更好
+          ),
+          child: const Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.add_rounded, size: 48, color: Colors.black12),
+                SizedBox(height: 8),
+                Text("NEW RECORD", style: TextStyle(color: Colors.black12, fontWeight: FontWeight.bold)),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
-    );
-  }
+      );
+    }
+
+
+
+
+
   
   // 用于切换显示人体内部结构图层
   Widget _toggleButton(String label, bool active, VoidCallback onTap) {
@@ -615,6 +519,125 @@ class _MainCanvasPageState extends State<MainCanvasPage> {
       child: Container(color: color), // 暂时用颜色占位，后续替换为真实 SVG
     );
   }
+
+  // 1. 新增一个方法，用于从预览卡片“回填”数据到编辑态
+  void _editExistingSnapshot(int index) {
+    final snapshot = savedSnapshots[index];
+    setState(() {
+      // 回填标记数据
+      droppedMarkers = List<Map<String, dynamic>>.from(snapshot['markers']);
+      // 回填图层开关
+      showSkeleton = snapshot['showSkeleton'] ?? false;
+      showMuscles = snapshot['showMuscles'] ?? false;
+      showOrgans = snapshot['showOrgans'] ?? false;
+      // 回填文本
+      _textController.text = snapshot['text'] ?? "";
+      
+      // 计算剩余可用数量 (3 - 已使用的数量)
+      markerCounts = {'good': 3, 'bad': 3, 'other': 3};
+      for (var m in droppedMarkers) {
+        markerCounts[m['type']] = (markerCounts[m['type']] ?? 0) - 1;
+      }
+
+      isPreviewMode = false; // 进入编辑模式
+    });
+  }
+
+  // 2. 修改 _buildPageView 里的点击逻辑
+  Widget _buildPageView() {
+    final int total = savedSnapshots.length + 1;
+
+    return SizedBox(
+      width: 600, // 稍微加宽一点，给 0.85 的大卡片留足呼吸空间
+      height: 600,
+      child: PageView.builder(
+        key: ValueKey('pv_${savedSnapshots.length}_$currentIndex'),
+        controller: PageController(
+          viewportFraction: 0.6, // 这个值控制卡片间的紧凑度，0.6 比较合适
+          initialPage: currentIndex,
+        ),
+        onPageChanged: (index) {
+          setState(() => currentIndex = index);
+        },
+        itemCount: total,
+        itemBuilder: (context, index) {
+          // --- 核心参数修正 ---
+          // 中间是编辑态的 0.85 倍，两侧是 0.7 倍
+          double scale = (index == currentIndex) ? 0.85 : 0.7;
+
+          return Center(
+            child: GestureDetector(
+              onTap: () {
+                if (index == currentIndex) {
+                  // 点击中间卡片进入编辑
+                  if (index == savedSnapshots.length) {
+                    setState(() {
+                      droppedMarkers.clear();
+                      markerCounts = {'good': 3, 'bad': 3, 'other': 3};
+                      _textController.clear();
+                      isPreviewMode = false;
+                    });
+                  } else {
+                    _editExistingSnapshot(index);
+                  }
+                } else {
+                  // 点击侧边卡片仅切换位置
+                  setState(() {
+                    currentIndex = index;
+                  });
+                }
+              },
+              child: Transform.scale(
+                scale: scale,
+                child: index == savedSnapshots.length
+                    ? _buildAddCard()
+                    : _buildSnapshotCard(savedSnapshots[index]),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // 3. 修改主编辑卡片的显示，使其比预览态（0.85）更小（例如 0.6）
+  // 在 build 方法中修改
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: Stack(
+                children: [
+                  Center(
+                    child: isPreviewMode 
+                      ? _buildPageView() 
+                      // 编辑状态：保持 1.0 原始尺寸
+                      : _buildMainCard(), 
+                  ),
+                  
+                  // 工具栏：仅在编辑态显示
+                  if (!isPreviewMode)
+                    Positioned(
+                      left: 20,
+                      top: 100,
+                      child: Column(
+                        children: markerCounts.entries
+                            .map((e) => _buildDraggableIcon(e.key, e.value))
+                            .toList(),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
 }
 
 
@@ -654,9 +677,16 @@ class _DroppedMarkerWidgetState extends State<DroppedMarkerWidget> {
    */
   @override
   Widget build(BuildContext context) {
+    // --- 核心修复：基于逻辑中心来定位具有 padding 的 Widget ---
+    // 1. widget.marker['position'] 存储的是图标在卡片逻辑坐标系中的逻辑中心点 (dx, dy)。
+    // 2. 这里的 DroppedMarkerWidget 的 padding 为 8，图标大小为 24x24，所以它的总大小是 40x40。
+    // 3. 图标本身在 40x40 Widget 中居中（图标中心位于 Widget 的 logical center (20, 20)）。
+    // 4. 为了使 Widget 中的图标中心重合于逻辑中心 (dx, dy)，Widget 本身相对于逻辑中心的偏移量必须是 (20, 20)。
+    // 5. 所以 Widget 的逻辑左上角点坐标应为 (dx - 20, dy - 20)。
+
     return Positioned(
-      left: widget.marker['position'].dx,
-      top: widget.marker['position'].dy,
+      left: widget.marker['position'].dx - 20, // 逻辑左上角 X
+      top: widget.marker['position'].dy - 20,  // 逻辑左上角 Y
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 200),
         opacity: isVisible ? 1.0 : 0.0,
@@ -669,7 +699,7 @@ class _DroppedMarkerWidgetState extends State<DroppedMarkerWidget> {
             child: Container(
               padding: const EdgeInsets.all(8), // 增加命中区
               color: Colors.transparent,
-              child: widget.icon,
+              child: widget.icon, // 图标本身居中放置。
             ),
           ),
         ),
